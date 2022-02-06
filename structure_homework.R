@@ -33,7 +33,11 @@ rs_old <- url_old %>% read_html() %>% html_nodes(xpath='/html/body/table[2]') %>
 
 #ANSWER
 
+rs_joined_orig <- full_join(rs_old,rs_new, by = c("Song","Artist"))
+nrow(rs_joined_orig)
 
+#> There were repetitive instances of the songs and artist with different ranks
+#> The function full_join did not create duplicates, instead grouped similar songs and artists together
 
 ### Question 2 ---------- 
 
@@ -44,7 +48,15 @@ rs_old <- url_old %>% read_html() %>% html_nodes(xpath='/html/body/table[2]') %>
 # Make Rank and Year into integer variables for rs_old before binding them into rs_all
 
 #ANSWER
+#> Oh I see here, I actually changed the character types to integer in #1, is that why I didn't
+#> see any issues?
 
+#> I converted rs_old - Rank and Year to integer type in the previous problem
+
+rs_new$Source <- "New"
+rs_old$Source <- "Old"
+rs_old <- rs_old %>% mutate(Rank = as.numeric(Rank), Year = as.numeric(Year)) 
+rs_all <- bind_rows(rs_old,rs_new)
 
 ### Question 3 ----------
 
@@ -57,6 +69,11 @@ rs_old <- url_old %>% read_html() %>% html_nodes(xpath='/html/body/table[2]') %>
 
 #ANSWER
 
+rs_all <- rs_all %>% mutate(Song = str_remove_all(Song, "The"), Artist = str_remove_all(Artist, "The")) 
+rs_all <- rs_all %>% mutate(Song = str_replace_all(Song, "&", "and"), Artist = str_replace_all(Artist, "&","and"))
+rs_all <- rs_all %>% mutate(Song = str_remove_all(Song, "[:punct:]"), Artist = str_remove_all(Artist, "[:punct:]"))
+rs_all <- rs_all %>% mutate(Song = str_to_lower(Song), Artist = str_to_lower(Artist)) 
+rs_all <- rs_all %>% mutate(Song = str_trim(Song, side = "both"), Artist = str_trim(Artist, side = "both"))
 
 ### Question 4 ----------
 
@@ -70,19 +87,29 @@ rs_old <- url_old %>% read_html() %>% html_nodes(xpath='/html/body/table[2]') %>
 
 #ANSWER
 
+rs_old2 <- subset(rs_all, Source == "Old")
+rs_new2 <- subset(rs_all, Source == "New")
+rs_joined <- full_join(rs_old2, rs_new2, by = c("Song","Artist"))
+rs_joined <- full_join(rs_old2, rs_new2, by = c("Song","Artist"), suffix = c("_Old","_New"))
+nrow(rs_joined)
 
 ### Question 5 ----------
 
 # Let's clean up rs_joined with the following steps:
-  # remove the variable "Source"
-  # remove any rows where Rank_New or Rank_Old is NA (so we have only the songs that appeared in both lists)
-  # calculate a new variable called "Rank_Change" that subtracts new rank from old rank
-  # sort by rank change
+# remove the variable "Source"
+# remove any rows where Rank_New or Rank_Old is NA (so we have only the songs that appeared in both lists)
+# calculate a new variable called "Rank_Change" that subtracts new rank from old rank
+# sort by rank change
 # Save those changes to rs_joined
 # You should now be able to see how each song moved up/down in rankings between the two lists
 
 #ANSWER
 
+rs_joined <- within(rs_joined, rm("Source_New"))
+rs_joined <- within(rs_joined, rm("Source_Old"))
+rs_joined <- rs_joined %>% drop_na
+rs_joined$Rank_Change <- rs_joined$Rank_New - rs_joined$Rank_Old
+rs_joined <- arrange(rs_joined, Rank_Change)
 
 ### Question 6 ----------
 
@@ -94,7 +121,30 @@ rs_old <- url_old %>% read_html() %>% html_nodes(xpath='/html/body/table[2]') %>
 
 #ANSWER
 
+# New 
+rs_joined <- rs_joined %>%
+  mutate(Decade_New = floor(rs_joined$Year_New/10) * 10)
+rs_joined$Decade_New <- factor(rs_joined$Decade_New, levels = c(1940, 1950, 1960, 1970, 1980, 1990, 2000), labels = c("1940s", "1950s", "1960s", "1970s", "1980s", "1990s", "2000s"))
 
+# Old
+rs_joined <- rs_joined %>%
+  mutate(Decade_Old = floor(rs_joined$Year_Old/10) * 10)
+rs_joined$Decade_Old <- factor(rs_joined$Decade_Old, levels = c(1940,1950, 1960, 1970, 1980, 1990, 2000), labels = c("1940s","1950s", "1960s", "1970s", "1980s", "1990s", "2000s"))
+
+# Grouping New
+
+rs_joined %>% group_by(Decade_New, .drop = FALSE) %>% 
+  summarize(mean_rank_change = mean(Rank_Change, na.rm = T),
+            .groups = "keep",
+            n = n())
+#> For Years_New, the 1980s improved the most in ranking
+
+#Grouping Old
+rs_joined %>% group_by(Decade_Old, .drop = FALSE) %>% 
+  summarize(mean_rank_change = mean(Rank_Change, na.rm = T),
+            .groups = "keep",
+            n = n())
+#> For Years_Old, the 1990s improved slightly more than the 1980s in ranking
 
 ### Question 7 ----------
 
@@ -105,7 +155,17 @@ rs_old <- url_old %>% read_html() %>% html_nodes(xpath='/html/body/table[2]') %>
 
 #ANSWER
 
+#> I obtained the number of songs in each decade using the summarize option as well
 
+#> Decade New
+fct_count(rs_joined$Decade_New)
+factor_lumped_New <- rs_joined$Decade_New %>% fct_lump(3)
+fct_count(factor_lumped_New, prop = TRUE)
+
+#> Decade Old
+fct_count(rs_joined$Decade_Old)
+factor_lumped_Old <- rs_joined$Decade_Old %>% fct_lump(3)
+fct_count(factor_lumped_Old, prop = TRUE)
 
 ### Question 8 ---------- 
 
@@ -115,6 +175,12 @@ rs_old <- url_old %>% read_html() %>% html_nodes(xpath='/html/body/table[2]') %>
 
 #ANSWER
 
+top20 <- read_csv("top_20.csv")
+top20 <- top20 %>%
+  mutate(Release = parse_date_time(Release,'%d%m%y'))
+
+#> For some reason the only format I'm able to change it to is the %d%m%y, but when looking into the variable the
+#> format is year-month-day, not sure if this is correct or not
 
 ### Question 9 --------
 
